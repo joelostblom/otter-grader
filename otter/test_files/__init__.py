@@ -8,7 +8,7 @@ import pickle
 
 from collections import namedtuple
 
-from .abstract_test import OK_FORMAT_VARNAME, TestCase, TestCaseResult
+from .abstract_test import OK_FORMAT_VARNAME, TestCase, TestCaseResult, TestFile
 from .exception_test import ExceptionTestFile, test_case
 from .metadata_test import NotebookMetadataExceptionTestFile, NotebookMetadataOKTestFile
 from .ok_test import OKTestFile
@@ -89,6 +89,7 @@ class GradingResults:
         # self.results = {}
         self.output = None
         self.all_hidden = False
+        self.pdf_error = None
 
     def __repr__(self):
         return self.summary()
@@ -125,6 +126,14 @@ class GradingResults:
                     passed = tcr["passed"],
                 ))
 
+            # fix the point values in each test case
+            test_cases = TestFile.resolve_test_file_points(tfr.get("points"), test_cases)
+
+            # TestFile.resolve_test_file_points returns a copy of each TestCase, so update the
+            # TestCaseResults
+            for tc, tcr in zip(test_cases, test_case_results):
+                tcr.test_case = tc
+
             test_file = OttrTestFile(
                 name = os.path.splitext(os.path.basename(tfr["filename"]))[0],
                 path = tfr["filename"],
@@ -156,6 +165,13 @@ class GradingResults:
         ``int`` or ``float``: the total points possible
         """
         return sum(tr.possible for tr in self.results.values())
+
+    @property
+    def passed_all_public(self):
+        """
+        ``bool``: whether all public tests in these results passed
+        """
+        return all(tr.passed_all_public for tr in self.results.values())
 
     def get_result(self, test_name):
         """
@@ -245,6 +261,15 @@ class GradingResults:
         """
         return self._plugin_data.get(plugin_name, default)
 
+    def set_pdf_error(self, error: Exception):
+        """
+        Set a PDF generation error to be displayed as a failed (0-point) test on Gradescope.
+
+        Args:
+            error (``Exception``): the error thrown
+        """
+        self.pdf_error = error
+
     def verify_against_log(self, log, ignore_hidden=True):
         """
         Verifies these scores against the results stored in this log using the results returned by 
@@ -263,7 +288,11 @@ class GradingResults:
         # for test_name in  self.test_cases:
         for test_name, test_file in self.results.items():
             if ignore_hidden:
-                tcrs = [test_case_result.passed for test_case_result in test_file.test_case_results if not test_case_result.hidden]
+                tcrs = [
+                    test_case_result.passed
+                    for test_case_result in test_file.test_case_results
+                    if not test_case_result.test_case.hidden
+                ]
                 score = sum(tcr.test_case.points for tcr in tcrs)
             else:
                 score = test_file.score
@@ -339,12 +368,22 @@ class GradingResults:
             hidden_test_visibility = "visible"
 
         # start w/ summary of public tests
-        output["tests"].append({
-            "name": "Public Tests",
-            "visibility": "visible",
-            "output": self.summary(public_only=True),
-            "status": "passed",
-        })
+        if not ag_config.show_hidden or ag_config.force_public_test_summary:
+            output["tests"].append({
+                "name": "Public Tests",
+                "visibility": "visible",
+                "output": self.summary(public_only=True),
+                "status": "passed" if self.passed_all_public else "failed",
+            })
+
+        # add PDF error test if indicated
+        if ag_config.warn_missing_pdf and self.pdf_error is not None:
+            output["tests"].append({
+                "name": "PDF Generation Failed",
+                "visibility": "visible",
+                "output": str(self.pdf_error),
+                "status": "failed",
+            })
 
         for test_name in self.test_files:
             test_file = self.get_result(test_name)
@@ -352,8 +391,8 @@ class GradingResults:
 
             output["tests"].append({
                 "name": test_file.name,
-                "score": score,
-                "max_score": possible,
+                "score": round(score, 5),
+                "max_score": round(possible, 5),
                 "visibility": hidden_test_visibility,
                 "output": test_file.summary(),
             })

@@ -3,6 +3,7 @@
 import fica
 import os
 import pathlib
+import yaml
 
 from typing import Any, Dict, List, Optional, Union
 
@@ -26,6 +27,12 @@ class Assignment(fica.Config, Loggable):
     name: Optional[str] = fica.Key(
         description="a name for the assignment (to validate that students submit to the correct " \
             "autograder)",
+        default=None,
+    )
+
+    config_file: Optional[str] = fica.Key(
+        description="path to a file containing assignment configurations; any configurations in " \
+            "this file are overridden by the in-notebook config",
         default=None,
     )
 
@@ -199,6 +206,11 @@ class Assignment(fica.Config, Loggable):
         validator=fica.validators.choice(["default", "colab", "jupyterlite"])
     )
 
+    python_version: Optional[Union[str, int, float]] = fica.Key(
+        description="the version of Python to use in the grading image (must be 3.6+)",
+        default=None,
+    )
+
     lang: Optional[str] = None
     """the language of the assignment"""
 
@@ -318,3 +330,30 @@ class Assignment(fica.Config, Loggable):
             ``pathlib.Path``: the path to the student directory or the specified file within it
         """
         return self.result / "student" / path
+
+    def get_python_version(self) -> Optional[str]:
+        """
+        Returns the Python version indicated as a string (to avoid issues with YAML interpreting it
+        as a number) if one is present.
+
+        Returns:
+            ``str | None``: the version string or ``None`` if none is present
+        """
+        return str(self.python_version) if self.python_version is not None else None
+
+    def load_config_file(self, config_file: str):
+        """
+        Update the values in this config using the values in the specified file.
+
+        Args:
+            config_file (``str``): the configuration file to read
+        """
+        self._logger.info(f"Reading assignment config file {config_file}")
+
+        with open(config_file) as f:
+            config = yaml.full_load(f.read())
+
+        if not isinstance(config, dict):
+            raise TypeError("Configuration files did not produce a dictionary")
+
+        self.update({**config, "config_file": config_file})

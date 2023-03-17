@@ -149,12 +149,13 @@ Gradescope container, because Otter's shelving mechanism does not store module o
 Autosubmission of Notebook PDFs
 +++++++++++++++++++++++++++++++
 
-Otter Generate allows instructors to automatically generate PDFs of students' notebooks and upload 
-these as submissions to a separate Gradescope assignment. This requires a Gradescope token, for 
-which you will be prompted to enter your Gradescope account credentials. Otter Generate also needs 
-the course ID and assignment ID of the assignment to which PDFs should be submitted—a separate 
-assignment from your autograder assignment of type "Homework / Problem Set." This 
-information can be gathered from the assignment URL on Gradescope:
+Otter Generate allows instructors to automatically generate PDFs of students' notebooks and upload
+these as submissions to a separate Gradescope assignment. This requires a Gradescope token or
+entering your Gradescope account credentials when prompted (for details see
+:ref: `the notebook metadata section <otter_assign_v1_assignment_metadata>`).
+Otter Generate also needs the course ID and assignment ID of the assignment to which PDFs should
+be submitted—a separate assignment from your autograder assignment of type "Homework / Problem Set."
+This information can be gathered from the assignment URL on Gradescope:
 
 .. code-block::
 
@@ -171,6 +172,14 @@ and password. Alternatively, you can provide these via the command-line with the
 
 Currently, this action supports :ref:`HTML comment filtering <pdfs>` with pagebreaks, but these 
 can be disabled with the ``filtering`` and ``pagebreaks`` keys of your config.
+
+For cases in which the generation or submission of this PDF fails, you can optionally relay this
+information to students using the ``warn_missing_pdf`` configuration. If this is set to true, a
+0-point failing test case will be displayed to the student with the error thrown while trying to
+generate or submit the PDF:
+
+.. image:: images/pdf_generation_failed_gs.png
+    :alt: PDF Generation Failed error on Gradescope
 
 
 Pass/Fail Thresholds
